@@ -1,3 +1,3 @@
 # minimalGPTTurk
 
-![tatlis kaplan](tatli_kaplan.jpg)
+![tatlis kaplan](assets/tatli_kaplan.jpg)
