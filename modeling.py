@@ -6,9 +6,7 @@ Referanslar:
 3) https://github.com/rasbt/LLMs-from-scratch
 """
 
-
 from typing import Union, List
-from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -92,14 +90,14 @@ class MultiHeadAttention(nn.Module):
         cfg: Modelin yapılandırma dosyası. Aşağıdaki örnek bir cfg verilmiştir (GPT-2-Small yapısına eş değer bir yapı döndürür)
 
             >>> @dataclass
-            >>> class GPTConfig:
-            >>>    block_size: int = 1024
-            >>>    vocab_size: int = 50257 
-            >>>    n_layer: int = 12
-            >>>    n_head: int = 12
-            >>>    n_embd: int = 768
-            >>>    dropout: float = 0.0
-            >>>    bias: bool = True
+             class GPTConfig:
+                block_size: int = 1024
+                vocab_size: int = 50257 
+                n_layer: int = 12
+                n_head: int = 12
+                n_embd: int = 768
+                dropout: float = 0.0
+                bias: bool = True
 
     Not:
         Flash attention yalnızca PyTorch >= 2.0 sürümünde kullanılabilir. Eğer daha eski bir sürümde çalışıyorsanız, flash attention kullanılamaz ve hata mesajı döner.
