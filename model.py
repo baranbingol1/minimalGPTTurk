@@ -52,3 +52,18 @@ class LayerNorm(nn.Module):
             x_norm = self.γ*x_norm + self.β
         
         return x_norm
+
+# gpt-2 makalesinde aktivasyon fonksiyonu olarak GELU kullanılmıştır.
+# GLU ve varyantları transformerlar için daha uygundur. Aşağıdaki makale bunu kanıtlamaktadır.
+# https://arxiv.org/abs/2002.05202
+class GELU(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x: torch.Tensor):
+        """GELU analitik olarak GELU(x) = x * Φ(x) şeklinde hesaplanabilir. (Φ, gaussian cumulative distribution function olmak üzere)
+        Ancak bunu yapmak hesaplama bakımından masraflıdır dolayısıyla tanh yakınsamasını kullanmak daha doğrudur. 
+        Aşağıda GELU fonksiyonu için tanh yakınsaması implemente edilmiştir.
+        Detaylar için : https://arxiv.org/pdf/1606.08415
+        """
+        return 0.5 * x * (1 + torch.tanh(torch.sqrt(torch.tensor(2.0/torch.pi)) * (x + 0.004715 * torch.pow(x,3))))
