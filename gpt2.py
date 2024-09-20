@@ -36,6 +36,7 @@ class Block(nn.Module):
         self.ffn = FFN(cfg)
     
     def forward(self, x: torch.Tensor):
-        x = x + self.attn(self.ln_1(x)) # x ile ekleyip forward eklemek shortcut ekliyor.
+        # shortcut oluşturmak için x = x + işlem şeklinde yapıyoruz.
+        x = x + self.attn(self.ln_1(x))
         x = x + self.ffn(self.ln_2(x))
         return x
