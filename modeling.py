@@ -139,3 +139,28 @@ class MultiHeadAttention(nn.Module):
 
         y = self.resid_dropout(self.c_proj(y))
         return y
+
+class SwiGLU(nn.Module):
+    
+    """
+    SwiGLU (Swish + GLU), GLU aktivasyon fonksiyonunun bir varyantıdır. 
+    GLU(x) = sigmoid(W1x+b)⊗(Vx+c) (⊗ kartezyen çarpım, W1 ve V ağırlık matrisleri, b ve c bias terimleri olmak üzere)
+    Swish(x) = x*sigmoid(ßx) (ß katsayı olmak üzere)
+    
+    SwiGLU fonksiyonu, GLU fonksiyonunun sigmoid katmanı yerine Swish (ß=1) kullanmasıyla türetiliyor.
+    SwiGLU(x) = Swish(W1x+b)⊗(Vx+c)
+    
+    SwiGLU fonksiyonun tanıtıldığı makale: https://arxiv.org/pdf/2002.05202
+    """
+    
+    def __init__(self, w1, w2, w3) -> None:
+        super().__init__()
+        self.w1 = w1
+        self.w2 = w2
+        self.w3 = w3
+    
+    def forward(self, x):
+        x1 = F.linear(x, self.w1.weight)
+        x2 = F.linear(x, self.w2.weight)
+        hidden = F.silu(x1) * x2 # silu -> swish fonksiyonu
+        return F.linear(hidden, self.w3.weight)
