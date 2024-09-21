@@ -134,9 +134,6 @@ class GELU(nn.Module):
         """
         return 0.5 * x * (1 + torch.tanh(torch.sqrt(torch.tensor(2.0/torch.pi)) * (x + 0.004715 * torch.pow(x,3))))
 
-# flash_attentionun olup olmadığını kontrol eder (flash attention yalnızca pytorch >=2.0 için var)
-FLASH_ATTENTION_AVAILABLE = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
-
 class SwiGLU(nn.Module):
     
     """
@@ -166,6 +163,9 @@ class SwiGLU(nn.Module):
         x2 = F.linear(x, self.w2.weight)
         hidden = F.silu(x1) * x2 # silu -> swish fonksiyonu
         return F.linear(hidden, self.w3.weight)
+
+# flash_attentionun olup olmadığını kontrol eder (flash attention yalnızca pytorch >=2.0 için var)
+FLASH_ATTENTION_AVAILABLE = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
 
 class MultiHeadAttention(nn.Module):
     """
