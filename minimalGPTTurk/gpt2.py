@@ -117,8 +117,8 @@ class GPT2Config:
 
 def get_gpt2_cfg(model_size: Literal["very_tiny", "tiny", "small", "medium", "large", "xl"], vocab_size: int) -> GPT2Config:
     configs = {
-        "very_tiny": {"n_layer": 3, "n_head": 3, "n_embd": 192}, # orijinal makalede olmayan uydurduğum minnak bir gpt-2
-        "tiny": {"n_layer": 6, "n_head": 6, "n_embd": 384}, # yine uydurduğum biraz daha az minnak bir gpt-2
+        "very_tiny": {"n_layer": 3, "n_head": 3, "n_embd": 192, "block_size": 128}, # orijinal makalede olmayan uydurduğum minnak bir gpt-2
+        "tiny": {"n_layer": 6, "n_head": 6, "n_embd": 384, "block_size": 512}, # yine uydurduğum biraz daha az minnak bir gpt-2
         "small":  {"n_layer": 12, "n_head": 12, "n_embd": 768},
         "medium": {"n_layer": 24, "n_head": 16, "n_embd": 1024},
         "large":  {"n_layer": 36, "n_head": 20, "n_embd": 1280},
