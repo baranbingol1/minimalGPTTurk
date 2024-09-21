@@ -4,10 +4,13 @@ https://cdn.openai.com/better-language-models/language_models_are_unsupervised_m
 """
 
 from dataclasses import dataclass
+from typing import Literal
 
 import torch
 import torch.nn as nn
 from modeling import LayerNorm, GELU, MultiHeadAttention
+
+######## GPT-2 YAPI TAŞLARI ########
 
 class FFN(nn.Module):
     """
@@ -40,19 +43,10 @@ class Block(nn.Module):
         x = x + self.att(self.ln_1(x))
         x = x + self.ffn(self.ln_2(x))
         return x
+    
+######## GPT-2 MODELİ ########
 
-# örnek gpt config.
-@dataclass
-class GPTConfig:
-    block_size: int = 1024
-    vocab_size: int = 50257
-    n_layer: int = 12
-    n_head: int = 12
-    n_embd: int = 768
-    dropout: float = 0.0
-    bias: bool = True
-
-class GPTModel(nn.Module):
+class GPT2Model(nn.Module):
     """GPT 2 modelinin implementasyonu
     Orijinal tensorflow implementasyonu ile karşılaştırma yapmak için :
     https://github.com/openai/gpt-2/blob/master/src/model.py bakabilirsiniz.
@@ -108,3 +102,26 @@ class GPTModel(nn.Module):
         logits = self.out_head(x)
         
         return logits
+    
+######## GPT-2 CONFİGLERİ ########
+
+@dataclass
+class GPT2Config:
+    vocab_size: int
+    n_layer: int
+    n_head: int
+    n_embd: int
+    block_size: int = 1024
+    dropout: float = 0.0
+    bias: bool = True
+
+def get_gpt2_cfg(model_size: Literal["small", "medium", "large", "xl"], vocab_size: int) -> GPT2Config:
+    configs = {
+        "small":  {"n_layer": 12, "n_head": 12, "n_embd": 768},
+        "medium": {"n_layer": 24, "n_head": 16, "n_embd": 1024},
+        "large":  {"n_layer": 36, "n_head": 20, "n_embd": 1280},
+        "xl":     {"n_layer": 48, "n_head": 25, "n_embd": 1600}
+    }
+    
+    model_config = configs.get(model_size.lower(), configs["small"])
+    return GPT2Config(vocab_size=vocab_size, **model_config)
