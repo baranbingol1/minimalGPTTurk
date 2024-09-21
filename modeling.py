@@ -60,6 +60,65 @@ class LayerNorm(nn.Module):
         
         return x_norm
     
+class RMSNorm(nn.Module):
+    
+    """
+    Root Mean Square Layer Normalization implementasyonu.
+    LLaMA 2 (Meta) modeline kullanılmıştır.
+    
+    Bazı terimler:
+    re-scaling invariance : Giriş verilerinin ölçeklenmesinin (katsayı ile çarpılmasının) normalizasyon sonrası çıktı üzerinde bir etkisinin olmaması. Bu, normalizasyon işleminin girdi verisinin büyüklüğünden bağımsız olduğu anlamına gelir.
+    re-centering invariance : Verilerin bir sabit ile kaydırılmasının (örneğin tüm giriş değerlerine aynı sabitin eklenmesi) normalizasyon işlemi sonrasında aynı sonucu vermesi demektir. Bu, normalizasyon işleminin verinin ortalamasından bağımsız olduğu anlamına gelir.
+    
+    RMSNorm hipotezine göre, Layer Normalization tekniğindeki başarının asıl sebebi re-scaling invariance olmasıdır, başka bir deyişle re-centering invariance olmasının bir etkisi yoktur.
+    Bu nedenle RMSNorm, Layer Normalization'dan farklı olarak re-centering invariance için uğraşmaz. Bu da hesaplamanın azalması anlamına gelmektedir çünkü girdi değerlerinden ortalama değeri çıkmayacaktır.
+    Hesaplama azaldığı için de hız artacaktır, yani RMS normalizasyonunun en büyük avantajı daha hızlı olmasıdır.
+    
+    RMS normalizasyonunun tanıtıldığı makale: https://arxiv.org/abs/1910.07467
+     
+    """
+    
+    """
+    Argümanlar: 
+        d: model boyutu
+        p: partial RMSNorm değeri: input değerlerinin belirli bir yüzdesine RMS normalization uygulanmasını sağlıyor. alabileceği değerler: [0, 1], varsayılan: -1.0 (devre dışı)
+        eps: epsilon değeri, varsayılan: 1e-8
+        bias: RMSNorm için bias terimi kullanılıp kullanılmayacağını belirten bool değeri. varsayılan: False (varsayılanın False olmasının sebebi, re-centering invariance yoktur.)
+    """
+    def __init__(self, d, p=-1., eps=1e-8, bias=False):
+        super(RMSNorm, self).__init__()
+
+        self.eps = eps
+        self.d = d
+        self.p = p
+        self.bias = bias
+
+        self.scale = nn.Parameter(torch.ones(d))
+        self.register_parameter("scale", self.scale)
+
+        if self.bias:
+            self.offset = nn.Parameter(torch.zeros(d))
+            self.register_parameter("offset", self.offset)
+
+    def forward(self, x):
+        if self.p < 0. or self.p > 1.:
+            norm_x = x.norm(2, dim=-1, keepdim=True)
+            d_x = self.d
+        else:
+            partial_size = int(self.d * self.p)
+            partial_x, _ = torch.split(x, [partial_size, self.d - partial_size], dim=-1)
+
+            norm_x = partial_x.norm(2, dim=-1, keepdim=True)
+            d_x = partial_size
+
+        rms_x = norm_x * d_x ** (-1. / 2)
+        x_normed = x / (rms_x + self.eps)
+
+        if self.bias:
+            return self.scale * x_normed + self.offset
+
+        return self.scale * x_normed
+    
 # gpt-2 makalesinde aktivasyon fonksiyonu olarak GELU kullanılmıştır.
 # GLU ve varyantları transformerlar için daha uygundur. Aşağıdaki makale bunu kanıtlamaktadır.
 # https://arxiv.org/abs/2002.05202
@@ -77,6 +136,36 @@ class GELU(nn.Module):
 
 # flash_attentionun olup olmadığını kontrol eder (flash attention yalnızca pytorch >=2.0 için var)
 FLASH_ATTENTION_AVAILABLE = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
+
+class SwiGLU(nn.Module):
+    
+    """
+    SwiGLU (Swish + GLU), GLU aktivasyon fonksiyonunun bir varyantıdır. LLaMA 2 (Meta) ve EVA-02 (BAAI) modellerinde kullanılmıştır.
+    GLU(x) = sigmoid(W1x+b)⊗(Vx+c) (⊗ kartezyen çarpım, W1 ve V ağırlık matrisleri, b ve c bias terimleri olmak üzere)
+    Swish(x) = x*sigmoid(ßx) (ß katsayı olmak üzere)
+    
+    SwiGLU fonksiyonu, GLU fonksiyonunun sigmoid katmanı yerine Swish (ß=1) kullanmasıyla türetiliyor.
+    SwiGLU(x) = Swish(W1x+b)⊗(Vx+c)
+    
+    SwiGLU fonksiyonun tanıtıldığı makale: https://arxiv.org/pdf/2002.05202
+    """
+    
+    """
+    Argümanlar:
+        w1, w2, w3: Ağırlık matrisleri
+    """
+    
+    def __init__(self, w1, w2, w3) -> None:
+        super().__init__()
+        self.w1 = w1
+        self.w2 = w2
+        self.w3 = w3
+    
+    def forward(self, x):
+        x1 = F.linear(x, self.w1.weight)
+        x2 = F.linear(x, self.w2.weight)
+        hidden = F.silu(x1) * x2 # silu -> swish fonksiyonu
+        return F.linear(hidden, self.w3.weight)
 
 class MultiHeadAttention(nn.Module):
     """
@@ -139,85 +228,4 @@ class MultiHeadAttention(nn.Module):
 
         y = self.resid_dropout(self.c_proj(y))
         return y
-
-class SwiGLU(nn.Module):
     
-    """
-    SwiGLU (Swish + GLU), GLU aktivasyon fonksiyonunun bir varyantıdır. 
-    GLU(x) = sigmoid(W1x+b)⊗(Vx+c) (⊗ kartezyen çarpım, W1 ve V ağırlık matrisleri, b ve c bias terimleri olmak üzere)
-    Swish(x) = x*sigmoid(ßx) (ß katsayı olmak üzere)
-    
-    SwiGLU fonksiyonu, GLU fonksiyonunun sigmoid katmanı yerine Swish (ß=1) kullanmasıyla türetiliyor.
-    SwiGLU(x) = Swish(W1x+b)⊗(Vx+c)
-    
-    SwiGLU fonksiyonun tanıtıldığı makale: https://arxiv.org/pdf/2002.05202
-    """
-    
-    def __init__(self, w1, w2, w3) -> None:
-        super().__init__()
-        self.w1 = w1
-        self.w2 = w2
-        self.w3 = w3
-    
-    def forward(self, x):
-        x1 = F.linear(x, self.w1.weight)
-        x2 = F.linear(x, self.w2.weight)
-        hidden = F.silu(x1) * x2 # silu -> swish fonksiyonu
-        return F.linear(hidden, self.w3.weight)
-    
-    
-class RMSNorm(nn.Module):
-    
-    """
-    Root Mean Square Layer Normalization implementasyonu.
-    
-    Bazı terimler:
-    re-scaling invariance : Giriş verilerinin ölçeklenmesinin (katsayı ile çarpılmasının) normalizasyon sonrası çıktı üzerinde bir etkisinin olmaması. Bu, normalizasyon işleminin girdi verisinin büyüklüğünden bağımsız olduğu anlamına gelir.
-    re-centering invariance : Verilerin bir sabit ile kaydırılmasının (örneğin tüm giriş değerlerine aynı sabitin eklenmesi) normalizasyon işlemi sonrasında aynı sonucu vermesi demektir. Bu, normalizasyon işleminin verinin ortalamasından bağımsız olduğu anlamına gelir.
-    
-    RMSNorm hipotezine göre, Layer Normalization tekniğindeki başarının asıl sebebi re-scaling invariance olmasıdır, başka bir deyişle re-centering invariance olmasının bir etkisi yoktur.
-    Bu nedenle RMSNorm, Layer Normalization'dan farklı olarak re-centering invariance için uğraşmaz. Bu da hesaplamanın azalması anlamına gelmektedir çünkü girdi değerlerinden ortalama değeri çıkmayacaktır.
-    Hesaplama azaldığı için de hız artacaktır, yani RMS normalizasyonunun en büyük avantajı daha hızlı olmasıdır.
-    
-    RMS normalizasyonunun tanıtıldığı makale: https://arxiv.org/abs/1910.07467
-     
-    """
-    def __init__(self, d, p=-1., eps=1e-8, bias=False):
-        """
-        d -> model boyutu
-        p -> partial RMSNorm değeri: input değerlerinin belirli bir yüzdesine RMS normalization uygulanmasını sağlıyor. alabileceği değerler: [0, 1], varsayılan: -1.0 (devre dışı)
-        eps ->  epsilon değeri, default: 1e-8
-        bias -> RMSNorm için bias terimi kullanılıp kullanılmayacağını belirten bool değeri. varsayılan: False (varsayılanın False olmasının sebebi, re-centering invariance yoktur.)
-        """
-        super(RMSNorm, self).__init__()
-
-        self.eps = eps
-        self.d = d
-        self.p = p
-        self.bias = bias
-
-        self.scale = nn.Parameter(torch.ones(d))
-        self.register_parameter("scale", self.scale)
-
-        if self.bias:
-            self.offset = nn.Parameter(torch.zeros(d))
-            self.register_parameter("offset", self.offset)
-
-    def forward(self, x):
-        if self.p < 0. or self.p > 1.:
-            norm_x = x.norm(2, dim=-1, keepdim=True)
-            d_x = self.d
-        else:
-            partial_size = int(self.d * self.p)
-            partial_x, _ = torch.split(x, [partial_size, self.d - partial_size], dim=-1)
-
-            norm_x = partial_x.norm(2, dim=-1, keepdim=True)
-            d_x = partial_size
-
-        rms_x = norm_x * d_x ** (-1. / 2)
-        x_normed = x / (rms_x + self.eps)
-
-        if self.bias:
-            return self.scale * x_normed + self.offset
-
-        return self.scale * x_normed
