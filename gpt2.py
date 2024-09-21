@@ -37,7 +37,7 @@ class Block(nn.Module):
     
     def forward(self, x: torch.Tensor):
         # shortcut oluşturmak için x = x + işlem şeklinde yapıyoruz.
-        x = x + self.attn(self.ln_1(x))
+        x = x + self.att(self.ln_1(x))
         x = x + self.ffn(self.ln_2(x))
         return x
 
