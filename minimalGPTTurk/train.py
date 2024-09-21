@@ -32,10 +32,10 @@ dataset = 'turkce_siirler'
 out_dir = 'out' # checkpoint dosyasının gideceği yer
 
 eval_iters = 200
-max_iters = 6000 # ne kadar training adımı olacağı
+max_iters = 2000 # ne kadar training adımı olacağı
 
-eval_interval = 20 # ne kadar training adımında bir evaluation yapacağı
-log_interval = 1 # ne kadar training adımında bir bilgileri ekrana yansıtacağı
+eval_interval = 500 # ne kadar training adımında bir evaluation yapacağı (bunu sık yapmanızı önermem checkpointi diske yazması uzun sürüyor).
+log_interval = 100 # ne kadar training adımında bir bilgileri ekrana yansıtacağı
 
 learning_rate = 6e-4
 weight_decay = 1e-1
@@ -43,7 +43,7 @@ weight_decay = 1e-1
 decay_lr = True # learning rate decay kullanılsın mı 
 lr_decay_iters = max_iters
 min_lr = 6e-5 # learning rate decay'in yakınsayacağı learning rate
-warmup_iters = 1000
+warmup_iters = 100
 device = 'cuda' # 'cpu' veya macbook kullanıyorsanız 'mps' (birden fazla gpu varsa 'cuda:0', 'cuda:1' gibi spesifik seçebilirsiniz.)
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16'
 ctx_dtype = torch.bfloat16 if dtype =='bfloat16' else torch.float16
@@ -132,6 +132,7 @@ X, Y = get_batch('train')
 local_iter_num = 0
 iter_num = 0
 best_val_loss = 1_000_000
+os.makedirs(out_dir, exist_ok=True)
 while True:
 
     lr = get_lr(iter_num) if decay_lr else learning_rate
@@ -140,7 +141,7 @@ while True:
 
     if iter_num % eval_interval == 0:
         losses = estimate_loss()
-        print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        print(f"iter {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
         if losses['val'] < best_val_loss:
             best_val_loss = losses['val']
             if iter_num > 0:
