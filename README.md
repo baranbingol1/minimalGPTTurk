@@ -1,6 +1,6 @@
 # minimalGPTTurk
 
-![tatlis kaplan](assets/tatli_kaplan.jpg)
+<img src="assets/tatli_kaplan.jpg" alt="Tatlış Kaplan" width="400" height="250"/>
 
 minimalGPTTurk, Türkçe dil modeli geliştirme eğitimi ve araştırmaları için tasarlanmış minimalist bir kütüphanedir. Kütüphane, dil modeli yapı taşlarını kullanarak yeni modeller oluşturmanıza ve bu modeller üzerinde araştırmalar yapmanıza olanak tanır. modeling.py dosyası, bu amaç doğrultusunda çoklu başlı dikkat mekanizması(multi-head attention), aktivasyon fonksiyonları ve normalizasyon katmanları gibi bileşenleri içerir.
 
