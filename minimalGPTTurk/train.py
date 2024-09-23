@@ -20,9 +20,9 @@ from contextlib import nullcontext
 from gpt2 import GPT2Model, get_gpt2_cfg
 
 ####### PARAMETRELER #######
-gpt2_cfg = get_gpt2_cfg('very_tiny', vocab_size=200019) # gpt-4o tokenizer ile verimizi tokenize ettiğimiz için aynı vocab_size'ı giriyoruz.
+gpt2_cfg = get_gpt2_cfg('very_tiny', vocab_size=141) # buraya kullandığımız tokenizer'ın vocab_size'ını girmeliyiz.
 model = GPT2Model(gpt2_cfg)
-batch_size = 32 # verinizi tokenize ettiğiniz zamanki batch_size ile aynı olması lazım
+batch_size = 256 # verinizi tokenize ettiğiniz zamanki batch_size ile aynı olması lazım
 
 block_size = gpt2_cfg.block_size
 do_compile = False # True yapmanız önerilir şuan windowsta desteklenmediği için False yaptım :(
@@ -32,9 +32,9 @@ dataset = 'turkce_siirler'
 out_dir = 'out' # checkpoint dosyasının gideceği yer
 
 eval_iters = 200
-max_iters = 2000 # ne kadar training adımı olacağı
+max_iters = 5000 # ne kadar training adımı olacağı
 
-eval_interval = 500 # ne kadar training adımında bir evaluation yapacağı (bunu sık yapmanızı önermem checkpointi diske yazması uzun sürüyor).
+eval_interval = 1000 # ne kadar training adımında bir evaluation yapacağı (bunu zaman aldığından sık yapmanızı önermem).
 log_interval = 100 # ne kadar training adımında bir bilgileri ekrana yansıtacağı
 
 learning_rate = 6e-4
@@ -44,8 +44,10 @@ decay_lr = True # learning rate decay kullanılsın mı
 lr_decay_iters = max_iters
 min_lr = 6e-5 # learning rate decay'in yakınsayacağı learning rate
 warmup_iters = 100
+
 device = 'cuda' # 'cpu' veya macbook kullanıyorsanız 'mps' (birden fazla gpu varsa 'cuda:0', 'cuda:1' gibi spesifik seçebilirsiniz.)
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16'
+dtype_of_data = np.uint8 # prepare.ipynb'de kullanılan dtype.
 ctx_dtype = torch.bfloat16 if dtype =='bfloat16' else torch.float16
 ctx = nullcontext() if device == 'cpu' else torch.autocast(device_type=device, dtype=ctx_dtype)
 ############################
@@ -55,9 +57,9 @@ data_pth = os.path.join('data', dataset)
 # modeli eğitirken veriyi alacağımız fonksiyon.
 def get_batch(split):
     if split == 'train':
-        data = np.memmap(os.path.join(data_pth, 'train.bin'), dtype=np.uint16, mode='r')
+        data = np.memmap(os.path.join(data_pth, 'train.bin'), dtype=dtype_of_data, mode='r')
     else:
-        data = np.memmap(os.path.join(data_pth, 'val.bin'), dtype=np.uint16, mode='r')
+        data = np.memmap(os.path.join(data_pth, 'val.bin'), dtype=dtype_of_data, mode='r')
     ix = torch.randint(len(data) - block_size, (batch_size,))
     x = torch.stack([torch.from_numpy((data[i:i+block_size]).astype(np.int64)) for i in ix])
     y = torch.stack([torch.from_numpy((data[i+1:i+1+block_size]).astype(np.int64)) for i in ix])
@@ -84,6 +86,7 @@ scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
 @torch.inference_mode()
 def estimate_loss():
     out = {}
+    perps = {}
     model.eval()
     for split in ['train', 'val']:
         losses = torch.zeros(eval_iters)
@@ -93,9 +96,11 @@ def estimate_loss():
                 logits = model(X)
                 loss = F.cross_entropy(logits.view(-1, logits.size(-1)), Y.view(-1), ignore_index=-1)
             losses[k] = loss.item()
-        out[split] = losses.mean()
+        mean_loss = losses.mean()
+        out[split] = mean_loss
+        perps[split] = torch.exp(mean_loss)
     model.train()
-    return out
+    return out, perps
 
 def get_lr(it):
     # warmup iterasyonları bitene kadar warmup lrsi
@@ -140,8 +145,8 @@ while True:
         param_group['lr'] = lr
 
     if iter_num % eval_interval == 0:
-        losses = estimate_loss()
-        print(f"iter {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        losses, perps = estimate_loss()
+        print(f"iter {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}, train perplexity {perps['train']:.4f}, val perplexity {perps['val']:.4f}")
         if losses['val'] < best_val_loss:
             best_val_loss = losses['val']
             if iter_num > 0:
